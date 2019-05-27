@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 The CyanogenMod Project
+ * Copyright (C) 2016 The CyanogenMod Project
  *               2017-2018 The LineageOS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,38 +15,37 @@
  * limitations under the License.
  */
 
-package org.mokee.settings.doze;
+package org.lineageos.pocketmode;
 
 import android.content.Context;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.os.SystemClock;
 import android.util.Log;
+
+import org.lineageos.internal.util.FileUtils;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-public class PickupSensor implements SensorEventListener {
-
+public class ProximitySensor implements SensorEventListener {
+    private static final String TAG = "PocketModeProximity";
     private static final boolean DEBUG = false;
-    private static final String TAG = "PickupSensor";
 
-    private static final int MIN_PULSE_INTERVAL_MS = 2500;
+    private static final String FPC_PROX_NODE = "/sys/devices/platform/soc/soc:fpc1020/proximity_state";
+    private static final String GOODIX_PROX_NODE = "/sys/devices/platform/soc/soc:goodix_fp/proximity_state";
 
-    private SensorManager mSensorManager;
-    private Sensor mSensor;
-    private Context mContext;
     private ExecutorService mExecutorService;
+    private Context mContext;
+    private Sensor mSensor;
+    private SensorManager mSensorManager;
 
-    private long mEntryTimestamp;
-
-    public PickupSensor(Context context) {
+    public ProximitySensor(Context context) {
         mContext = context;
         mSensorManager = mContext.getSystemService(SensorManager.class);
-        mSensor = DozeUtils.getSensor(mSensorManager, "xiaomi.sensor.pickup");
+        mSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
         mExecutorService = Executors.newSingleThreadExecutor();
     }
 
@@ -56,17 +55,12 @@ public class PickupSensor implements SensorEventListener {
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-        if (DEBUG) Log.d(TAG, "Got sensor event: " + event.values[0]);
-
-        long delta = SystemClock.elapsedRealtime() - mEntryTimestamp;
-        if (delta < MIN_PULSE_INTERVAL_MS) {
-            return;
+        boolean isNear = event.values[0] < mSensor.getMaximumRange();
+        if (FileUtils.isFileWritable(FPC_PROX_NODE)) {
+            FileUtils.writeLine(FPC_PROX_NODE, isNear ? "1" : "0");
         }
-
-        mEntryTimestamp = SystemClock.elapsedRealtime();
-
-        if (event.values[0] == 1) {
-            DozeUtils.launchDozePulse(mContext);
+        if (FileUtils.isFileWritable(GOODIX_PROX_NODE)) {
+            FileUtils.writeLine(GOODIX_PROX_NODE, isNear ? "1" : "0");
         }
     }
 
@@ -80,7 +74,6 @@ public class PickupSensor implements SensorEventListener {
         submit(() -> {
             mSensorManager.registerListener(this, mSensor,
                     SensorManager.SENSOR_DELAY_NORMAL);
-            mEntryTimestamp = SystemClock.elapsedRealtime();
         });
     }
 
