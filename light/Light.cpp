@@ -134,6 +134,7 @@ namespace implementation {
 
 Return<Status> Light::setLight(Type type, const LightState& state) {
     LightStateHandler handler = nullptr;
+    bool handled = false;
 
     /* Lock global mutex until light state is updated. */
     std::lock_guard<std::mutex> lock(globalLock);
